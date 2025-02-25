@@ -38,7 +38,10 @@ def create_keyboard(page: int):
 # دالة لبدء البوت
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "مرحبًا! يمكنك اختيار سورة من القرآن.\n"
+        "السلام عليكم ورحمة الله وبركاته\n"
+        "أهلأ وسهلأ بك اخي المسلم في بوت القران الكريم\n"
+        "لتنزيل الايات القرانيةالمباركة وبصوت القارئ الشيخ مشاري العفاسي\n"
+        " يمكنك اختيار سورة من القرآن.\n"
         "استخدم الأزرار أدناه لاختيار السورة أو التنقل بين الصفحات.",
         reply_markup=create_keyboard(page=0)
     )
