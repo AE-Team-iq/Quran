@@ -3,7 +3,7 @@ import json
 import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
-
+import time
 # إعداد التسجيل
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
@@ -87,6 +87,9 @@ def main():
     
     # بدء البوت
     application.run_polling()
+    while True:
+        time.sleep(1)
+    
 
 if __name__ == "__main__":
     main()
