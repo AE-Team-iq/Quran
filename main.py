@@ -1,7 +1,8 @@
 import logging
 import json
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+import os
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # إعداد التسجيل
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -13,94 +14,76 @@ with open("suras.json", "r", encoding="utf-8") as file:
 # عدد السور في كل صفحة
 SURAS_PER_PAGE = 10
 
-
-# دالة لعرض السور في صفحة معينة
-def format_suras_page(page: int):
+# دالة لإنشاء لوحة المفاتيح
+def create_keyboard(page: int):
     start_index = page * SURAS_PER_PAGE
     end_index = start_index + SURAS_PER_PAGE
     suras_page = SURAS[start_index:end_index]
 
-    formatted_text = "اختر سورة من القرآن:\n"
-    for i, sura in enumerate(suras_page, start=1):
-        formatted_text += f"{i}. {sura['name']} (استخدم /sura {sura['file_id']})\n"
+    keyboard = [
+        [InlineKeyboardButton(sura["name"], callback_data=f"sura_{sura['file_id']}")] for sura in suras_page
+    ]
 
-    return formatted_text
+    navigation_buttons = []
+    if page > 0:
+        navigation_buttons.append(InlineKeyboardButton("السابق", callback_data=f"page_{page - 1}"))
+    if end_index < len(SURAS):
+        navigation_buttons.append(InlineKeyboardButton("التالي", callback_data=f"page_{page + 1}"))
 
+    if navigation_buttons:
+        keyboard.append(navigation_buttons)
+
+    return InlineKeyboardMarkup(keyboard)
 
 # دالة لبدء البوت
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["page"] = 0  # تخزين رقم الصفحة الحالية
     await update.message.reply_text(
-        "السلام عليكم ورحمة الله وبركاته\n"
-        "أهلأ وسهلأ بك اخي المسلم في بوت القران الكريم\n"
-        "لتنزيل الايات القرانيةالمباركة وبصوت القارئ الشيخ مشاري العفاسي\n"
-        " يمكنك اختيار سورة من القرآن.\n"
-        "استخدم الأوامر أدناه لاختيار السورة أو التنقل بين الصفحات.\n"
-        f"{format_suras_page(0)}\n"
-        "استخدم /next للصفحة التالية أو /prev للصفحة السابقة."
+        "مرحبًا! يمكنك اختيار سورة من القرآن.\n"
+        "استخدم الأزرار أدناه لاختيار السورة أو التنقل بين الصفحات.",
+        reply_markup=create_keyboard(page=0)
     )
 
-
-# دالة للتنقل إلى الصفحة التالية
-async def next_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    page = context.user_data.get("page", 0)
-    if (page + 1) * SURAS_PER_PAGE < len(SURAS):
-        context.user_data["page"] = page + 1
-        await update.message.reply_text(
-            f"{format_suras_page(page + 1)}\n"
-            "استخدم /next للصفحة التالية أو /prev للصفحة السابقة."
-        )
-    else:
-        await update.message.reply_text("لا توجد صفحات أخرى.")
-
-
-# دالة للتنقل إلى الصفحة السابقة
-async def prev_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    page = context.user_data.get("page", 0)
-    if page > 0:
-        context.user_data["page"] = page - 1
-        await update.message.reply_text(
-            f"{format_suras_page(page - 1)}\n"
-            "استخدم /next للصفحة التالية أو /prev للصفحة السابقة."
-        )
-    else:
-        await update.message.reply_text("أنت في الصفحة الأولى.")
-
-
-# دالة لإرسال الملف الصوتي
-async def send_sura(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        # الحصول على رقم السورة من الأمر
-        sura_number = context.args[0]
-
+# دالة للتعامل مع اختيار السورة
+async def choose_sura(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()  # تأكيد استلام الاستجابة
+    
+    logging.info(f"Received callback data: {query.data}")  # تسجيل البيانات المرسلة
+    
+    if query.data.startswith("sura_"):
+        # الحصول على معرف الملف الصوتي
+        file_id = query.data.split("_")[1]
+        
         # البحث عن السورة في قاعدة البيانات
-        sura = next((s for s in SURAS if s["file_id"] == sura_number), None)
-
+        sura = next((s for s in SURAS if s["file_id"] == file_id), None)
+        
         if sura:
             # إرسال الملف الصوتي
             await context.bot.send_audio(
-                chat_id=update.message.chat_id,
+                chat_id=query.message.chat_id,
                 audio=sura["audio_url"]
             )
         else:
-            await update.message.reply_text("عذرًا، السورة غير موجودة.")
-    except (IndexError, ValueError):
-        await update.message.reply_text("استخدم الأمر بشكل صحيح: /sura_<رقم السورة>")
-
+            await query.edit_message_text("عذرًا، الملف الصوتي غير متاح.")
+    elif query.data.startswith("page_"):
+        # تغيير الصفحة
+        page = int(query.data.split("_")[1])
+        await query.edit_message_text(
+            "اختر سورة من القرآن:",
+            reply_markup=create_keyboard(page)
+        )
 
 # إعداد البوت
 def main():
-    application = Application.builder().token("7606398917:AAGf3-bpQ572hyNr0zOaemmWS51-hxV9W98").build()
-
+    BOT_TOKEN = os.getenv("BOT_TOKEN")  # قراءة التوكن من متغيرات البيئة
+    application = Application.builder().token(BOT_TOKEN).build()
+    
     # إضافة الأوامر
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("next", next_page))
-    application.add_handler(CommandHandler("prev", prev_page))
-    application.add_handler(CommandHandler("sura", send_sura))
-
+    application.add_handler(CallbackQueryHandler(choose_sura))
+    
     # بدء البوت
     application.run_polling()
-
 
 if __name__ == "__main__":
     main()
